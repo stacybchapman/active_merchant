@@ -63,10 +63,44 @@ class RemoteLitleTest < Test::Unit::TestCase
         number:  "4457000300000007",
         payment_cryptogram: "BwABBJQ1AgAAAAAgJDUCAAAAAAA="
       })
+    @check = check(
+      name: 'Tom Black',
+      routing_number:  '011075150',
+      account_number: '4099999992',
+      account_type: 'Checking'
+    )
+    @declined_check = check(
+      name: 'Peter Green',
+      routing_number: '053133052',
+      account_number: '9099999992',
+      account_type: 'Corporate'
+    )
+    @authorize_check = check(
+      name: 'John Smith',
+      routing_number: '011075150',
+      account_number: '1099999999',
+      account_type: 'Checking'
+    )
+    @declined_authorize_check = check(
+      name: 'Peter Green',
+      routing_number: '011075150',
+      account_number: '8099999999',
+      account_type: 'Corporate'
+    )
   end
 
   def test_successful_authorization
     assert response = @gateway.authorize(10010, @credit_card1, @options)
+    assert_success response
+    assert_equal 'Approved', response.message
+  end
+
+  def test_successful_authorization_with_echeck
+    options = @options.merge({
+      order_id: '38',
+      order_source: 'telephone'
+    })
+    assert response = @gateway.authorize(3002, @authorize_check, options)
     assert_success response
     assert_equal 'Approved', response.message
   end
@@ -93,6 +127,16 @@ class RemoteLitleTest < Test::Unit::TestCase
     )
     assert_failure response
     assert_equal 'Insufficient Funds', response.message
+  end
+
+  def test_unsuccessful_authorization_with_echeck
+    options = @options.merge({
+      order_id: '40',
+      order_source: 'telephone'
+    })
+    assert response = @gateway.authorize(3004, @declined_authorize_check, options)
+    assert_failure response
+    assert_equal 'Absolute Decline', response.message
   end
 
   def test_successful_purchase
@@ -141,6 +185,16 @@ class RemoteLitleTest < Test::Unit::TestCase
     assert_equal 'Approved', response.message
   end
 
+  def test_successful_purchase_with_echeck
+    options = @options.merge({
+      order_id: '42',
+      order_source: 'telephone'
+    })
+    assert response = @gateway.purchase(2004, @check, options)
+    assert_success response
+    assert_equal 'Approved', response.message
+  end
+
   def test_unsuccessful_purchase
     assert response = @gateway.purchase(60060, @credit_card2, {
         :order_id=>'6',
@@ -156,6 +210,16 @@ class RemoteLitleTest < Test::Unit::TestCase
     )
     assert_failure response
     assert_equal 'Insufficient Funds', response.message
+  end
+
+  def test_unsuccessful_purchase_with_echeck
+    options = @options.merge({
+      order_id: '44',
+      order_source: 'telephone'
+    })
+    assert response = @gateway.purchase(2009, @declined_check, options)
+    assert_failure response
+    assert_equal 'Absolute Decline', response.message
   end
 
   def test_authorization_capture_refund_void
@@ -176,6 +240,18 @@ class RemoteLitleTest < Test::Unit::TestCase
     assert_equal 'Approved', void.message
   end
 
+  def test_void_with_echeck
+    options = @options.merge({
+      order_id: '42',
+      order_source: 'telephone'
+    })
+    assert sale = @gateway.purchase(2004, @check, options)
+
+    assert void = @gateway.void(sale.authorization)
+    assert_success void
+    assert_equal 'Approved', void.message
+  end
+
   def test_void_authorization
     assert auth = @gateway.authorize(10010, @credit_card1, @options)
 
@@ -192,6 +268,18 @@ class RemoteLitleTest < Test::Unit::TestCase
 
   def test_partial_refund
     assert purchase = @gateway.purchase(10010, @credit_card1, @options)
+
+    assert refund = @gateway.refund(444, purchase.authorization)
+    assert_success refund
+    assert_equal 'Approved', refund.message
+  end
+
+  def test_partial_refund_with_echeck
+    options = @options.merge({
+      order_id: '82',
+      order_source: 'telephone'
+    })
+    assert purchase = @gateway.purchase(2004, @check, options)
 
     assert refund = @gateway.refund(444, purchase.authorization)
     assert_success refund
